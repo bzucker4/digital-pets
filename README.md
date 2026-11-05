@@ -2,18 +2,18 @@
 
 Free tools and a starter pet for ChatGPT and Codex desktop pets.
 
-![Mochi](pets/mochi/preview.gif)
+![Mochi](preview.gif)
 
 ## Mochi, a free starter pet
 
-`pets/mochi/` holds a small purple bunny: a 1536 x 2288 transparent PNG sheet (8 columns by 11 rows, 192 x 208 cells) and a `pet.json`.
+The repo root holds a small purple bunny: a 1536 x 2288 transparent PNG sheet (8 columns by 11 rows, 192 x 208 cells) and a `pet.json`.
 
-- **ChatGPT on the web:** upload `pets/mochi/spritesheet.png` as a custom pet. This is tested.
-- **Desktop app (Windows and Mac):** copy the `mochi` folder into `~/.codex/pets/` (on Windows, `%USERPROFILE%\.codex\pets\`), then refresh Settings > Pets. This is not tested yet. The `pet.json` fields come from a third-party copy of the hatch-pet skill.
+- **ChatGPT on the web:** upload `spritesheet.png` as a custom pet. This is tested.
+- **Desktop app (Windows and Mac):** make a folder named `mochi` containing `pet.json` and `spritesheet.png`, and put it in `~/.codex/pets/` (on Windows, `%USERPROFILE%\.codex\pets\`), then refresh Settings > Pets. This is not tested yet. The `pet.json` fields come from a third-party copy of the hatch-pet skill.
 
 ## Validate your own pet
 
-Open `validator/index.html` in a browser, drop in your spritesheet and read the results. Nothing is uploaded; it runs in your browser.
+Open `index.html` in a browser, drop in your spritesheet and read the results. Nothing is uploaded; it runs in your browser.
 
 It checks size on disk, exact dimensions, transparency, leftover magenta background, frame counts per row, empty cells, edge bleed and an optional `pet.json`. A preview plays any row.
 
