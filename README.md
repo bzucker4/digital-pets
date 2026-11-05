@@ -13,7 +13,9 @@ The repo root holds a small purple bunny: a 1536 x 2288 transparent PNG sheet (8
 
 ## Validate your own pet
 
-Open `index.html` in a browser, drop in your spritesheet and read the results. Nothing is uploaded; it runs in your browser.
+Use it online: https://bzucker4.github.io/digital-pets/
+
+Or open `index.html` in a browser. Drop in your spritesheet and read the results. Nothing is uploaded; it runs in your browser.
 
 It checks size on disk, exact dimensions, transparency, leftover magenta background, frame counts per row, empty cells, edge bleed and an optional `pet.json`. A preview plays any row.
 
