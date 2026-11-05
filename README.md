@@ -39,6 +39,6 @@ The 9-row standard sheet (1536 x 1872) is also supported.
 
 ## Custom pets
 
-I make finished, checked pets for developer brands and creators. [Link to Gumroad]
+I make finished, checked pets for developer brands and creators. Get the free Mochi pack and see my other listings on [Gumroad](https://atlascreative0.gumroad.com/l/ttidi).
 
 Third-party project. Not affiliated with or endorsed by OpenAI.
