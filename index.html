@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pet Sheet Validator and Previewer</title>
+<meta name="description" content="Free client-side validator and animation previewer for desktop AI companion sprite sheets. Third-party tool, not affiliated with OpenAI.">
+<style>
+  :root { --bg:#14141a; --panel:#1d1d26; --line:#2d2d3a; --text:#e8e8ef; --mute:#9a9ab0; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --accent:#8b7cf6; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:17px; margin:0 0 12px; }
+  p.sub { color:var(--mute); margin:0 0 20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .drop { border:2px dashed var(--line); border-radius:10px; padding:28px; text-align:center; color:var(--mute); cursor:pointer; }
+  .drop.over { border-color:var(--accent); color:var(--text); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  label { color:var(--mute); font-size:13px; display:flex; flex-direction:column; gap:4px; }
+  select, input[type=number], input[type=range] { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:14px; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  ul.checks { list-style:none; padding:0; margin:12px 0 0; }
+  ul.checks li { padding:6px 0; border-top:1px solid var(--line); display:flex; gap:10px; }
+  .tag { font-size:12px; font-weight:600; min-width:46px; text-align:center; border-radius:4px; padding:1px 6px; height:fit-content; }
+  .pass { background:#14351f; color:var(--ok); } .warn { background:#3a2e0e; color:var(--warn); } .fail { background:#3b1717; color:var(--bad); }
+  .stage { background:
+    conic-gradient(#2a2a35 25%, #22222c 0 50%, #2a2a35 0 75%, #22222c 0) 0 0/20px 20px;
+    border:1px solid var(--line); border-radius:10px; min-height:260px; display:flex; align-items:center; justify-content:center; padding:12px; overflow:auto; }
+  canvas { image-rendering:pixelated; }
+  .note { color:var(--mute); font-size:13px; margin-top:8px; }
+  code { background:var(--bg); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pet Sheet Validator and Previewer</h1>
+  <p class="sub">Everything runs in your browser. Files are never uploaded. Third-party tool, not affiliated with OpenAI.</p>
+
+  <section class="card">
+    <h2>1. Load a sprite sheet</h2>
+    <div class="drop" id="drop">Drop a PNG or WebP sprite sheet here, or click to choose a file</div>
+    <input id="file" type="file" accept="image/png,image/webp" hidden>
+    <div class="row" style="margin-top:12px">
+      <label>Format preset
+        <select id="preset"></select>
+      </label>
+      <label>Optional pet.json
+        <input id="json" type="file" accept=".json,application/json">
+      </label>
+    </div>
+    <p class="note">Presets match the output of the built-in hatch-pet generator (checked against a real export). Unused cells must be fully transparent.</p>
+  </section>
+
+  <section class="card" id="results" hidden>
+    <h2>2. Validation</h2>
+    <div id="summary"></div>
+    <ul class="checks" id="checks"></ul>
+  </section>
+
+  <section class="card" id="preview" hidden>
+    <h2>3. Preview</h2>
+    <div class="row" style="margin-bottom:12px">
+      <label>Row <select id="rowSel"></select></label>
+      <label>FPS <input id="fps" type="number" min="1" max="30" value="8" style="width:70px"></label>
+      <label>Scale <select id="scale"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      <label>Cells in row <input id="frames" type="number" min="1" max="8" value="8" style="width:70px"></label>
+      <button id="play">Pause</button>
+      <button class="ghost" id="auto">Auto-detect frames</button>
+    </div>
+    <div class="stage"><canvas id="cv"></canvas></div>
+    <p class="note" id="rowInfo"></p>
+    <p class="note">Row names follow community-reported order for the 9-row layout and are not confirmed by OpenAI docs. Check them against a pet that loads in your client.</p>
+  </section>
+</main>
+
+<script>
+// ---- Format constants. Edit these once you have confirmed the real values. ----
+const PRESETS = {
+  'v2 extended (1536 x 2288, 8 x 11, 192 x 208 cells)': { w:1536, h:2288, cw:192, ch:208, cols:8, rows:11,
+      frames:[6,8,8,4,5,8,6,6,6,8,8] },
+  'v1 standard (1536 x 1872, 8 x 9, 192 x 208 cells)':  { w:1536, h:1872, cw:192, ch:208, cols:8, rows:9,
+      frames:[6,8,8,4,5,8,6,6,6] }
+};
+// Row order and frames per row confirmed from a hatch-pet export (Mochi): validator reported sprite_version 2,
+// frames_per_row [6,8,8,4,5,8,6,6,6,8,8]. Rows 10-11 are 16 look directions in 22.5 degree steps.
+const ROW_NAMES = ['idle','running-right','running-left','waving','jumping','failed','waiting','running','review',
+  'look 0 to 157.5 deg','look 180 to 337.5 deg'];
+const MANIFEST_KEYS = ['id','displayName','description','spritesheetPath'];
+const MAX_BYTES = 20 * 1024 * 1024;
+const ALPHA_EDGE_THRESHOLD = 8;
+const KEY = [255,0,255], KEY_DIST = 96;   // hatch-pet chroma key #FF00FF   // alpha above this on a cell border counts as bleed
+
+const $ = id => document.getElementById(id);
+let img = null, imgData = null, fileBytes = 0, cfg = null, jsonText = null;
+let timer = null, frame = 0, playing = true;
+
+const presetSel = $('preset');
+Object.keys(PRESETS).forEach(k => presetSel.add(new Option(k, k)));
+
+const drop = $('drop'), fileIn = $('file');
+drop.onclick = () => fileIn.click();
+['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', ev => { if (ev.dataTransfer.files[0]) loadSheet(ev.dataTransfer.files[0]); });
+fileIn.onchange = () => fileIn.files[0] && loadSheet(fileIn.files[0]);
+presetSel.onchange = () => img && run();
+$('json').onchange = async e => { jsonText = e.target.files[0] ? await e.target.files[0].text() : null; img && run(); };
+
+function loadSheet(f) {
+  fileBytes = f.size;
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = () => { img = im; run(); URL.revokeObjectURL(url); };
+  im.onerror = () => alert('Could not decode that image.');
+  im.src = url;
+}
+
+function add(list, level, text) {
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="tag ${level}">${level.toUpperCase()}</span><span></span>`;
+  li.lastChild.textContent = text;
+  list.appendChild(li);
+  return level;
+}
+
+function run() {
+  cfg = PRESETS[presetSel.value];
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  imgData = ctx.getImageData(0, 0, c.width, c.height);
+
+  const list = $('checks'); list.innerHTML = '';
+  const res = [];
+
+  // size on disk
+  res.push(add(list, fileBytes < MAX_BYTES ? 'pass' : 'fail',
+    `File size ${(fileBytes/1048576).toFixed(2)} MiB (limit ${MAX_BYTES/1048576} MiB)`));
+
+  // dimensions
+  const dimOk = c.width === cfg.w && c.height === cfg.h;
+  res.push(add(list, dimOk ? 'pass' : 'fail',
+    dimOk ? `Dimensions ${c.width} x ${c.height} match the preset`
+          : `Dimensions are ${c.width} x ${c.height}, expected ${cfg.w} x ${cfg.h}`));
+
+  // grid math
+  const gridOk = cfg.cw * cfg.cols === cfg.w && cfg.ch * cfg.rows === cfg.h;
+  if (!gridOk) res.push(add(list, 'fail', 'Preset grid math does not multiply out to the canvas size. Fix PRESETS.'));
+
+  // transparency
+  const d = imgData.data; let transparent = 0, opaque = 0;
+  for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) transparent++; else if (d[i] === 255) opaque++; }
+  const total = d.length / 4;
+  res.push(add(list, transparent > 0 ? 'pass' : 'fail',
+    transparent > 0 ? `Has transparency (${(100*transparent/total).toFixed(1)}% of pixels fully transparent)`
+                    : 'No transparent pixels found. The sheet needs an RGBA background.'));
+  if (opaque / total > 0.7) res.push(add(list, 'warn', 'Over 70% of pixels are opaque. Check that the background is removed.'));
+
+  // per-cell checks
+  const bleed = [], empty = [];
+  const rowsToCheck = Math.floor(c.height / cfg.ch), colsToCheck = Math.floor(c.width / cfg.cw);
+  const filled = [], usedCols = [], keyCells = [];
+  for (let r = 0; r < rowsToCheck; r++) {
+    filled[r] = 0; usedCols[r] = [];
+    for (let col = 0; col < colsToCheck; col++) {
+      const x0 = col * cfg.cw, y0 = r * cfg.ch;
+      let any = false, edge = false, key = 0;
+      for (let y = 0; y < cfg.ch; y++) {
+        for (let x = 0; x < cfg.cw; x++) {
+          const a = d[((y0 + y) * c.width + (x0 + x)) * 4 + 3];
+          if (a > 0) any = true;
+          if (a > 200) { const k = ((y0 + y) * c.width + (x0 + x)) * 4;
+            if (Math.hypot(d[k]-KEY[0], d[k+1]-KEY[1], d[k+2]-KEY[2]) < KEY_DIST) key++; }
+          if (a > ALPHA_EDGE_THRESHOLD && (x === 0 || y === 0 || x === cfg.cw - 1 || y === cfg.ch - 1)) edge = true;
+        }
+      }
+      if (any) { filled[r]++; usedCols[r].push(col); }
+      if (key > 20) keyCells.push(`r${r + 1}c${col + 1}`);
+      if (edge) bleed.push(`r${r + 1}c${col + 1}`);
+    }
+  }
+  res.push(add(list, bleed.length ? 'fail' : 'pass',
+    bleed.length ? `Edge bleed in ${bleed.length} cell(s): ${bleed.slice(0, 12).join(', ')}${bleed.length > 12 ? ' ...' : ''}`
+                 : 'No alpha bleed on cell borders'));
+  const emptyRows = filled.map((n, i) => n === 0 ? i + 1 : null).filter(Boolean);
+  res.push(add(list, emptyRows.length ? 'warn' : 'pass',
+    emptyRows.length ? `Fully empty rows: ${emptyRows.join(', ')} (fine if those states are unused)`
+                     : 'Every row has at least one drawn cell'));
+
+  // magenta chroma key left behind
+  res.push(add(list, keyCells.length ? 'fail' : 'pass',
+    keyCells.length ? `Opaque magenta (#FF00FF) background residue in ${keyCells.length} cell(s): ${keyCells.slice(0, 12).join(', ')}`
+                    : 'No magenta chroma-key residue'));
+
+  // frames per row (only when the grid matches the preset)
+  if (cfg.frames && dimOk) {
+    const bad = [];
+    cfg.frames.forEach((n, r) => {
+      const u = usedCols[r] || [];
+      const contiguous = u.length === n && u.every((col, i) => col === i);
+      if (!contiguous) bad.push(`row ${r + 1} ${ROW_NAMES[r] || ''}: expected ${n} frames in columns 1-${n}, found ${u.length}${u.length ? ' (cols ' + u.map(x => x + 1).join(',') + ')' : ''}`);
+    });
+    res.push(add(list, bad.length ? 'fail' : 'pass',
+      bad.length ? 'Frame counts differ from the generator layout: ' + bad.join('; ')
+                 : 'Frames per row match the generator layout, and unused cells are empty'));
+  }
+
+  // manifest
+  if (jsonText) {
+    try {
+      const j = JSON.parse(jsonText);
+      res.push(add(list, 'pass', `pet.json parses. Top-level keys: ${Object.keys(j).join(', ') || '(none)'}`));
+      const missing = MANIFEST_KEYS.filter(k => typeof j[k] !== 'string' || !j[k].trim());
+      res.push(add(list, missing.length ? 'fail' : 'pass',
+        missing.length ? `pet.json is missing or has empty: ${missing.join(', ')}` : 'pet.json has id, displayName, description and spritesheetPath'));
+      if (j.spritesheetPath && !/^spritesheet\.(webp|png)$/.test(j.spritesheetPath))
+        res.push(add(list, 'warn', 'spritesheetPath is not spritesheet.webp or spritesheet.png. Some uploaders expect that exact name.'));
+      if (j.id && !/^[a-z0-9-]+$/.test(j.id)) res.push(add(list, 'warn', 'id should be lowercase letters, numbers and hyphens.'));
+    } catch (e) { res.push(add(list, 'fail', 'pet.json is not valid JSON: ' + e.message)); }
+  }
+
+  const fails = res.filter(r => r === 'fail').length, warns = res.filter(r => r === 'warn').length;
+  $('summary').innerHTML = fails ? `<span class="tag fail">${fails} FAILED</span> ${warns} warning(s)`
+    : `<span class="tag pass">PASSED</span> ${warns} warning(s)`;
+  $('results').hidden = false;
+  setupPreview(rowsToCheck, filled);
+}
+
+function setupPreview(rows, filled) {
+  const sel = $('rowSel'); sel.innerHTML = '';
+  for (let r = 0; r < rows; r++) sel.add(new Option(`Row ${r + 1}${ROW_NAMES[r] ? ': ' + ROW_NAMES[r] : ''} (${filled[r]} cells)`, r));
+  sel.value = filled.findIndex(n => n > 0) >= 0 ? filled.findIndex(n => n > 0) : 0;
+  window._filled = filled;
+  autoFrames(); $('preview').hidden = false; restart();
+}
+function autoFrames() { const n = window._filled[+$('rowSel').value] || 1; $('frames').value = Math.min(n, 8); }
+
+function restart() {
+  clearInterval(timer); frame = 0;
+  const fps = Math.max(1, +$('fps').value || 8);
+  timer = setInterval(() => { if (playing) { frame++; draw(); } }, 1000 / fps);
+  draw();
+}
+
+function draw() {
+  if (!img || !cfg) return;
+  const row = +$('rowSel').value, n = Math.max(1, +$('frames').value), s = +$('scale').value;
+  const cv = $('cv'); cv.width = cfg.cw * s; cv.height = cfg.ch * s;
+  const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const f = frame % n;
+  ctx.drawImage(img, f * cfg.cw, row * cfg.ch, cfg.cw, cfg.ch, 0, 0, cv.width, cv.height);
+  $('rowInfo').textContent = `Row ${row + 1}, frame ${f + 1} of ${n}`;
+}
+
+$('rowSel').onchange = () => { autoFrames(); restart(); };
+['fps','frames','scale'].forEach(id => $(id).onchange = restart);
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; };
+$('auto').onclick = () => { autoFrames(); restart(); };
+</script>
+</body>
+</html>
