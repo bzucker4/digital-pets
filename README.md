@@ -8,7 +8,7 @@ Free tools and a starter pet for ChatGPT and Codex desktop pets.
 
 The repo root holds a small purple bunny: a 1536 x 2288 transparent PNG sheet (8 columns by 11 rows, 192 x 208 cells) and a `pet.json`.
 
-- **ChatGPT on the web:** upload `spritesheet.png` as a custom pet. This is tested.
+- **ChatGPT on the web (tested):** needs a ChatGPT Plus account. Go to Settings > Pets > Upload and choose `spritesheet.png`.
 - **Desktop app (Windows and Mac):** make a folder named `mochi` containing `pet.json` and `spritesheet.png`, and put it in `~/.codex/pets/` (on Windows, `%USERPROFILE%\.codex\pets\`), then refresh Settings > Pets. This is not tested yet. The `pet.json` fields come from a third-party copy of the hatch-pet skill.
 
 ## Validate your own pet
